@@ -554,7 +554,7 @@ El componente tiene dos modos de uso:
 
 ### Componentes que reutiliza
 
-- **`model_deploy.py`:** construye el modelo final, una Regresión Logística con `class_weight="balanced"` entrenada con las variables transformadas por `ft_engineering.py`. De este archivo, el monitoreo toma los datos de entrenamiento transformados (`X_train`), el modelo (`pipe_modelo`) y el preprocesador ya ajustado (`preprocesador`).
+- **`model_deploy.py`:** construye el modelo final, una Regresión Logística con `class_weight="balanced"` entrenada con las variables transformadas por `ft_engineering.py`. De este archivo, el monitoreo toma los datos de entrenamiento transformados (`X_train`), el modelo (`pipe_modelo`) y el preprocesador ya ajustado (`preprocesador`). Este archivo se llamó `model_deploy.py` hasta el avance V1.3.1 (ver el aviso de esa sección).
 - **`ft_engineering.py`:** aporta la configuración compartida (columnas categóricas y excluidas, ruta de la base, semilla y variable objetivo).
 
 Utiliza además `scipy`, `numpy` y `pandas`, ya instaladas en el entorno virtual.
@@ -623,11 +623,86 @@ Al ejecutar el script se imprime la tabla de métricas del último mes simulado 
 
 Para medir el drift de un dataset real, se indica su ruta en `RUTA_DATASET_NUEVO`. El archivo debe tener las mismas columnas que la base original. El script lo prepara igual que en el entrenamiento, lo compara contra la referencia y muestra la tabla de métricas y la cantidad de variables con drift.
 
-### Consideraciones
+## Avance V1.3.1: Disponibilización del Modelo por Streamlit
 
-- **La perturbación no se acumula:** en cada mes se toma una muestra nueva de la base y se le aplica el mismo cambio, por lo que el "mes" es el número de iteración y no un deterioro que crece con el tiempo.
-- **Criterio sensible:** como se evalúan decenas de variables con varias métricas y basta con que una supere su umbral, el criterio puede generar alertas por azar muestral, sobre todo con muestras de 1.000 filas. Los resultados se interpretan como una señal para revisar los datos, no como una confirmación de que el modelo dejó de funcionar.
+En esta etapa se construyó una aplicación web con **Streamlit** (`model_streamlit.py`) que permite usar el modelo y monitorear su data drift desde el navegador, sin tocar el código. La aplicación tiene dos funciones principales:
 
-### Revisión y versionado de esta etapa
+- **Predecir:** calcula la probabilidad de que un cliente pague a tiempo, de forma individual o por lotes (CSV), y la traduce a una banda de riesgo.
+- **Monitorear:** simula el data drift mes a mes con las métricas de `model_monitoring.py` y muestra el estado de cada variable, la evolución en el tiempo y recomendaciones.
 
-Este README fue redactado a partir de esta actualización. Para ello se revisaron los archivos de las etapas anteriores y se corrigieron las inconsistencias encontradas. Una vez comprobado que todo estaba bien, se realizó un *push* desde la rama `developer` y, finalmente, el *merge* a la rama `main`.
+### Librerías adicionales
+
+Se agregaron `streamlit` y `plotly` al archivo `requirements.txt` y se instalaron en el entorno virtual. La aplicación utiliza además `scipy`, `numpy` y `pandas`, ya instaladas.
+
+### Archivos involucrados
+
+| Archivo | Rol |
+|---|---|
+| `model.py` | Modelo final (Regresión Logística). Es el archivo que antes se llamaba `model_deploy.py`. Expone los datos de entrenamiento transformados (`X_train`), el preprocesador, el modelo y el *pipeline* completo (`pipe_final`, que va de los datos originales a la probabilidad) |
+| `model_monitoring.py` | Simulación de drift y métricas (KS, PSI, Jensen-Shannon y chi-cuadrado). Su única modificación fue importar el modelo desde `model` en lugar de `model_deploy` |
+| `model_streamlit.py` | Aplicación Streamlit. Reutiliza los dos archivos anteriores tal como están |
+
+### Ejecución
+
+Desde la carpeta del proyecto, con el entorno virtual activado:
+
+```bash
+streamlit run model_sreamlit.py
+```
+
+La aplicación carga el modelo y los datos **una sola vez** por sesión (con `st.cache_resource`) y vuelve a simular solo cuando cambian los parámetros de la barra lateral.
+
+### Barra lateral: parámetros de la simulación
+
+Los parámetros se aplican todos juntos al presionar **Simular**. Sus valores iniciales salen de la configuración de `model_monitoring.py`:
+
+| Parámetro | Rango | Valor inicial | Descripción |
+|---|---|---|---|
+| Meses a simular | 3 a 36 | 24 | Cantidad de meses desde el entrenamiento |
+| Drift acumulativo | Sí / No | Sí | Si está activado, en el mes *k* las variaciones se multiplican por *k*, de modo que el drift crece con el tiempo. Si no, cada mes repite la misma variación |
+| Filas por mes | 200 hasta el tamaño de la base | 1.000 | Muestra que se toma de la base cada mes |
+| Fracción de filas modificadas | 0,05 a 1,0 | 0,30 | Proporción de filas a las que se les cambia la media y la desviación |
+
+La opción acumulativa resuelve una limitación de `model_monitoring.py` (que repite la misma variación cada mes): permite ver cómo evoluciona el drift cuando se acentúa con el tiempo. Un selector adicional, **Mes a analizar**, define para qué mes se muestran las pestañas de detalle.
+
+### Pestañas de la aplicación
+
+**1. Predicción**
+
+- **Individual:** un formulario con un campo por cada variable de entrada (24 en total, las de la base final, incluidas las derivadas). Las numéricas parten de la mediana de la base y las categóricas ofrecen un selector con las opciones existentes. Al presionar **Calcular riesgo**, la aplicación muestra la probabilidad de pagar a tiempo, el riesgo de incumplimiento (1 menos esa probabilidad) y la banda de riesgo.
+- **Por lotes:** se descarga una plantilla CSV con las columnas esperadas, se completa y se sube. Se aceptan separadores coma o punto y coma, las columnas de más se ignoran y, si falta alguna, la aplicación avisa. El resultado agrega tres columnas (`proba_pago_a_tiempo`, `riesgo_incumplimiento` y `banda_riesgo`), muestra la cantidad de clientes evaluados, el riesgo promedio y un gráfico de clientes por banda, y se puede descargar como CSV.
+
+Las bandas de riesgo (valores ilustrativos) se definen sobre el riesgo de incumplimiento:
+
+| Riesgo de incumplimiento | Banda |
+|---|---|
+| Menos de 20 % | 🟢 Bajo |
+| 20 % a 40 % | 🟡 Moderado |
+| 40 % a 60 % | 🟠 Medio-alto |
+| 60 % a 80 % | 🔴 Alto |
+| 80 % o más | 🟣 Muy alto |
+
+**2. Drift por variable**
+
+Muestra, para el mes elegido, cuántas variables están en cada estado, una tabla con las métricas de cada una (PSI, JS, KS y chi-cuadrado) y una barra de riesgo. Además, permite comparar el histograma del entrenamiento con el del mes actual para cualquier variable. El estado de cada variable es un semáforo:
+
+| Estado | Variables numéricas | Variables categóricas |
+|---|---|---|
+| 🔴 Crítico | PSI > 0,25 o JS > 0,10 | Chi-cuadrado con p < 0,001 |
+| 🟡 Alerta | PSI > 0,10 o KS con p < 0,05 | Chi-cuadrado con p < 0,05 |
+| 🟢 Estable | Ninguna de las anteriores | Ninguna de las anteriores |
+
+Este semáforo es más gradual que el criterio de `model_monitoring.py`, donde cualquier métrica fuera de umbral marca drift: aquí, un KS significativo por sí solo solo genera una alerta.
+
+**3. Evolución temporal**
+
+- **PSI medio y máximo por mes**, con las líneas de umbral crítico (0,25) y de alerta (0,10).
+- **Cambios abruptos:** se marcan los meses en que el salto del PSI medio respecto del mes anterior es atípico (más de 2 desvíos estándar).
+- **Tendencia:** se ajusta una regresión lineal al PSI medio y se informa si crece o decrece de forma significativa (p < 0,05).
+- **Primer mes con drift** según el criterio de `model_monitoring.py`.
+- **PSI por variable numérica** a lo largo del tiempo (por defecto, las 5 de mayor PSI).
+- **Probabilidad media de pagar a tiempo** por mes, frente a la de referencia del entrenamiento.
+
+### Versionado de esta etapa
+
+Esta etapa se desarrolló en la rama `developer`. Una vez comprobado que todo estaba bien, los cambios se integraron a la rama `main` mediante un *merge*.

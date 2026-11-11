@@ -18,3 +18,5 @@ pycaret>=3.3
 feature-engine==1.6.2
 matplotlib
 six
+streamlit
+plotly
