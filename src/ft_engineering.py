@@ -35,7 +35,13 @@ TARGET = "Pago_atiempo"
 SEMILLA = 42
 TEST_SIZE = 0.20
 
-COLS_EXCLUIR = ["fecha_prestamo"]           # texto de fecha: no entra como feature
+# Columnas que no entran como features:
+#   - fecha_prestamo: texto de fecha; su información temporal ya se extrajo en el EDA.
+#   - dias_desde_inicio: se excluye porque mide el paso del tiempo y no el riesgo del cliente.
+#     Un cliente nuevo siempre tendría una fecha posterior a la de entrenamiento, y los créditos
+#     recientes aún no tuvieron tiempo de incumplir (sesgo de madurez, ver EDA): el modelo
+#     aprendería "fecha reciente = menos impagos", una relación que no se sostendría en producción.
+COLS_EXCLUIR = ["fecha_prestamo", "dias_desde_inicio"]
 COLS_CATEGORICAS = ["tipo_credito", "tipo_laboral"]
 COLS_ORDINALES = {                          # columna -> orden de menor a mayor
     "tendencia_ingresos": ["Decreciente", "Estable", "Creciente"],
