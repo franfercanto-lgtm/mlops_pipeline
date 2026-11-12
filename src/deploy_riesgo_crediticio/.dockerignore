@@ -1,0 +1,22 @@
+# Datos y entrenamiento: NO van en la imagen (solo se necesitan los joblibs ya generados)
+*.csv
+model_deploy.py
+
+# Entornos y basura de Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Control de versiones / editor / secretos
+.git/
+.gitignore
+.vscode/
+.idea/
+.env
+
+# Documentación y archivos de la imagen que no se usan en runtime
+README.md
+Dockerfile
+.dockerignore

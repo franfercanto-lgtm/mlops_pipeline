@@ -1,0 +1,13 @@
+tipo_credito,capital_prestado,plazo_meses,cuota_pactada,edad_cliente,tipo_laboral,salario_cliente,cant_creditosvigentes,total_otros_prestamos,puntaje_datacredito,saldo_mora_codeudor,promedio_ingresos_datacredito,tendencia_ingresos,tiene_mora,huella_consulta,creditos_sectorReal,total_creditos_sectores,sin_historial_ingresos_buro,sin_score_buro,sin_saldos_buro,plazo_largo,dia_semana,hora_desembolso,es_fin_de_semana
+4,2400000.0,6,362024,28,Empleado,2280000,4,666000,846.0,0.0,,,False,6,0,2.0,True,False,False,False,3.0,17.0,False
+9,1909851.6,9,178364,30,Empleado,4000000,5,2000000,788.0,0.0,1498698.0,Creciente,False,4,0,4.0,False,False,False,False,3.0,14.0,False
+9,2330368.8,9,218470,55,Independiente,3000000,7,1500000,781.0,0.0,,,False,3,4,6.0,True,False,False,False,6.0,10.0,True
+9,2659106.4,9,249170,46,Empleado,3000000,7,1200000,844.0,0.0,,,False,3,0,2.0,True,False,False,False,5.0,19.0,True
+4,1390680.0,12,96575,28,Independiente,2490000,2,400000,768.0,0.0,2677500.0,Decreciente,False,6,1,1.0,False,False,False,False,1.0,11.0,False
+9,2814468.0,5,464852,49,Independiente,6500000,10,5500000,655.0,0.0,4772350.0,Creciente,False,2,4,8.0,False,False,False,False,2.0,14.0,False
+4,2016000.0,6,298679,43,Empleado,4500000,5,1200000,794.0,0.0,1913365.0,Creciente,False,7,1,4.0,False,False,False,False,0.0,17.0,False
+4,1541400.0,10,142252,48,Independiente,3000000,11,1100000,750.0,0.0,,,False,5,6,8.0,True,False,False,False,4.0,18.0,False
+4,6996000.0,36,232417,41,Empleado,3300000,7,200000,487.0,0.0,1210134.0,Decreciente,True,5,1,5.0,False,False,False,True,2.0,8.0,False
+4,3949999.2,6,586683,24,Independiente,6000000,4,2000000,785.0,0.0,,,False,6,0,1.0,True,False,False,False,6.0,11.0,True
+4,3744000.0,6,560716,51,Independiente,4500000,5,976000,855.0,0.0,,,False,7,1,5.0,True,False,False,False,0.0,16.0,False
+4,2088000.0,12,163525,63,Empleado,1000000,5,300000,786.0,0.0,,,False,5,3,3.0,True,False,False,False,1.0,12.0,False
