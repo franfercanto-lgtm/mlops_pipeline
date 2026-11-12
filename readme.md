@@ -705,4 +705,93 @@ Este semáforo es más gradual que el criterio de `model_monitoring.py`, donde c
 
 ### Versionado de esta etapa
 
-Esta etapa se desarrolló en la rama `developer`. Una vez comprobado que todo estaba bien, los cambios se integraron a la rama `main` mediante un *merge*.
+Esta etapa se desarrolló en la rama `developer`. Una vez comprobado que todo estaba bien, los cambios se integraron a la rama `main` mediante un *merge*. En el comit, el nombre se guardó incorrectamente como "V1.3.0..." en lugar de "V1.3.1..."
+
+## Avance V1.4.0: Disponibilización del modelo con Docker
+
+### Resumen
+
+En esta versión el modelo final (Regresión Logística balanceada con feature engineering integrado) pasa de ser un script de entrenamiento a un **servicio consumible**: una API REST construida con FastAPI, empaquetada en una imagen Docker, que realiza **predicción por lotes** a partir de un archivo CSV. Para evitar cnfusiones y facilitar la ejecución, todo lo necesario para ejecutar el docker fur guaraddo en la subcarpeta "deploy_riesgo_crediticio"
+
+### Control de versiones
+
+Todo el trabajo se desarrolló y versionó en la rama `developer` y luego se integró a `main` mediante un **pull request**.
+
+### Qué se entregó
+
+```
+├── model_deploy.py          # entrenamiento: genera los 2 joblibs
+├── custom_transformers.py   # clase CalculaRatios (compartida por entrenamiento y API)
+├── schemas.py               # contrato de entrada: columnas, tipos y reglas de validación
+├── main.py                  # API: carga de modelos, validación, predicción y endpoints
+├── artifacts/
+│   ├── preprocesador.joblib # ratios + imputación + codificación + escalado
+│   └── modelo.joblib        # regresión logística entrenada
+├── requirements.txt         # dependencias con versiones fijadas
+├── Dockerfile
+├── .dockerignore
+├── ejemplo_entrada.csv      # 12 clientes de ejemplo para pruebas
+└── README.md
+```
+
+### Decisiones de diseño
+
+**1. Separación entre entrenamiento y servicio.**
+`model_deploy.py` sigue siendo el script de entrenamiento y ahora, al final, persiste **dos artefactos**: el preprocesador (ratios, imputación, codificación y escalado) y el modelo. La API solo los carga; nunca reentrena ni necesita la base de datos. La clase propia `CalculaRatios` se movió a `custom_transformers.py`, porque joblib guarda la *referencia* a la clase y no su código: ambos scripts deben poder importarla. Se evitó llamar al módulo `transformers.py` para no colisionar con el paquete homónimo de Hugging Face.
+
+**2. Ratios calculados automáticamente.**
+La base de entrenamiento ya traía los ratios calculados, pero un usuario real no los tiene. La API recibe `salario_cliente` y `cant_creditosvigentes` y el pipeline calcula `cuota_sobre_salario` y `huella_por_credito` internamente, con la misma fórmula del entrenamiento.
+
+**3. CSV como único formato de entrada.**
+Se eligió CSV por ser un formato mucho más conocido por personas ajenas al mundo del ML: se arma y se revisa desde Excel. Se soportan los separadores `,` y `;` (Excel en español), BOM y codificación ANSI. Los decimales van con punto.
+
+**4. Validación estricta.**
+De momento el modelo entrenado cuenta con pocos datos (~10.800 créditos y ~510 casos de clase 0) como para hacer algo más flexible. Por eso la API no completa faltantes ni ignora columnas desconocidas: ante cualquier error responde `422`, **no predice nada** e informa fila y campo (con la numeración de Excel). Detalles:
+- Se validan tipos y rangos de cada columna.
+- Se validan reglas de coherencia que se cumplen en el 100% del entrenamiento (`plazo_largo`, `es_fin_de_semana`, `sin_score_buro`).
+- Única excepción: los campos del buró pueden venir vacíos, porque un cliente sin historial es un caso real.
+
+**5. Salida.**
+Por cada cliente se devuelve la clase predicha, la probabilidad de pagar a tiempo y un mensaje interpretable:
+
+| `Pago_atiempo` | Mensaje |
+|---|---|
+| 1 | "El cliente tiene una alta probabilidad de pagar a tiempo" |
+| 0 | "El cliente posee un perfil de ALTO RIESGO crediticio" |
+
+El umbral de clasificación es 0.5 por defecto y se puede modificar con la variable de entorno `UMBRAL`, sin tocar el código.
+
+**6. Reproducibilidad y seguridad del despliegue.**
+- Versiones fijadas: Python 3.11.9, scikit-learn 1.4.2, feature-engine 1.6.2 (y `numpy<2`, `pandas<3` por compatibilidad).
+- Si la versión de scikit-learn del entorno no coincide con la del entrenamiento, **la API no arranca**, para evitar predicciones incorrectas sin aviso.
+- Al iniciar, se verifica que las columnas del esquema coincidan con las que espera el modelo.
+
+**7. Imagen Docker.**
+- Base `python:3.11.9-slim`, la misma versión de Python del entrenamiento.
+- Las dependencias se instalan antes de copiar el código, para aprovechar el caché de capas.
+- Se ejecuta con un usuario sin privilegios (no root).
+- Incluye `HEALTHCHECK` sobre `/health`.
+- La imagen contiene únicamente la API y los dos joblibs; el CSV de entrenamiento y `model_deploy.py` se excluyen mediante `.dockerignore`.
+
+### Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/health` | Estado del servicio y del modelo |
+| POST | `/predict` | Recibe un CSV (campo `archivo`) y devuelve una predicción por fila |
+
+Documentación interactiva disponible en `/docs`.
+
+### Cómo ejecutarlo
+
+```bash
+docker build -t riesgo-crediticio-api .
+docker run -d --name riesgo-api -p 8000:8000 riesgo-crediticio-api
+curl http://localhost:8000/health
+```
+
+### Verificación
+
+- **Equivalencia numérica:** las probabilidades de la API coinciden con las del pipeline original (diferencia máxima de 5e-5, atribuible al redondeo a 4 decimales).
+- **Casos de error:** columnas faltantes o sobrantes, valores fuera de rango, celdas obligatorias vacías, reglas de coherencia, archivo vacío o ilegible, y filas en blanco intermedias.
+- **Contenedor:** la imagen se construyó correctamente y el contenedor responde en `/health` con `status: ok` y `modelo_cargado: true`.
